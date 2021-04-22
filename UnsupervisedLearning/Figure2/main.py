@@ -26,25 +26,24 @@ def runnet(dt, _lambda, F, Input, C, Nneuron, Ntime, Thresh):
 
     for t in range(1, Ntime):
 
+        # the membrane potential is a leaky integration of the feedforward input and the spikes
         V[:, t] = (
             (1 - _lambda * dt) * V[:, t - 1]
             + dt * F.T @ Input[:, t - 1]
             + C @ O[:, t - 1]
             + 0.001 * np.random.randn(Nneuron)
-        )  # the membrane potential is a leaky integration of the feedforward input and the spikes
+        )
 
         temp = V[:, t] - Thresh - 0.01 * np.random.randn(Nneuron)
         k = np.argmax(temp)  # finding the neuron with largest membrane potential
         m = temp[k]
 
-        if (
-            m >= 0
-        ):  # if its membrane potential exceeds the threshold the neuron k spikes
+        # if its membrane potential exceeds the threshold the neuron k spikes
+        if m >= 0:
             O[k, t] = 1  # the spike ariable is turned to one
 
-        rO[:, t] = (1 - _lambda * dt) * rO[:, t - 1] + 1 * O[
-            :, t
-        ]  # filtering the spikes
+        # filtering the spikes
+        rO[:, t] = (1 - _lambda * dt) * rO[:, t - 1] + 1 * O[:, t]
 
     return (rO, O, V)
 
@@ -94,15 +93,14 @@ def Learning(dt, _lambda, epsr, epsf, alpha, beta, mu, Nneuron, Nx, Thresh, F, C
     Ntime = 1000  # size of an input sequence
     TotTime = Nit * Ntime  # total time of Learning
 
-    T = (
-        np.floor(np.log(TotTime) / np.log(2)).astype(int) + 1
-    )  # Computing the size of the matrix where the weights are stocked on times defined on an exponential scale
-    Cs = np.zeros(
-        (T, Nneuron, Nneuron)
-    )  # the array that contains the different instances of reccurent connectivty through learning
-    Fs = np.zeros(
-        (T, Nx, Nneuron)
-    )  # the array that contains the different instances of feedforward connectivty through learning
+    # Computing the size of the matrix where the weights are stocked on times defined on an exponential scale
+    T = np.floor(np.log(TotTime) / np.log(2)).astype(int) + 1
+
+    # the array that contains the different instances of reccurent connectivty through learning
+    Cs = np.zeros((T, Nneuron, Nneuron))
+
+    # the array that contains the different instances of feedforward connectivty through learning
+    Fs = np.zeros((T, Nx, Nneuron))
 
     V = np.zeros((Nneuron,))  # voltage vector of the population
     O = 0  # variable indicating the eventual  firing of a spike
@@ -115,9 +113,9 @@ def Learning(dt, _lambda, epsr, epsf, alpha, beta, mu, Nneuron, Nx, Thresh, F, C
 
     A = 2000  # Amplitude of the input
     sigma = np.abs(30)  # std of the smoothing kernel
-    w = (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(
-        -((np.arange(1, 1001) - 500) ** 2) / (2 * sigma ** 2)
-    )  # gaussian smoothing kernel used to smooth the input
+
+    # gaussian smoothing kernel used to smooth the input
+    w = (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-((np.arange(1, 1001) - 500) ** 2) / (2 * sigma ** 2))
     w = w / np.sum(w, axis=0)  # normalization oof the kernel
 
     j = 0  # index of the (2^j)-time step (exponential times)
@@ -131,47 +129,46 @@ def Learning(dt, _lambda, epsr, epsf, alpha, beta, mu, Nneuron, Nx, Thresh, F, C
             print("%d percent of the learning  completed" % l)
             l = l + 1
 
-        if (
-            np.mod(i, 2 ** j) == 0
-        ):  # registering ther weights on an exponential time scale 2^j
+        # registering ther weights on an exponential time scale 2^j
+        if np.mod(i, 2 ** j) == 0:
             Cs[j, :, :] = C  # registering the recurrent weights
             Fs[j, :, :] = F  # registering the Feedfoward weights
             j = j + 1
 
-        if (
-            np.mod(i - 1, Ntime) == 0
-        ):  # Generating a new iput sequence every Ntime time steps
-            Input = np.random.multivariate_normal(
-                np.zeros(Nx), np.eye(Nx), Ntime
-            ).T  # generating a new sequence of input which a gaussion vector
+        # Generating a new iput sequence every Ntime time steps
+        if np.mod(i - 1, Ntime) == 0:
+            # generating a new sequence of input which a gaussion vector
+            Input = np.random.multivariate_normal(np.zeros(Nx), np.eye(Nx), Ntime).T
             for d in range(Nx):
-                Input[d, :] = A * np.convolve(
-                    Input[d, :], w, "same"
-                )  # smoothing the previously generated white noise with the gaussian window w
+                # smoothing the previously generated white noise with the gaussian window w
+                Input[d, :] = A * np.convolve(Input[d, :], w, "same")
 
+        # the membrane potential is a leaky integration of the feedforward input and the spikes
         V = (
             (1 - _lambda * dt) * V
             + dt * F.T @ Input[:, np.mod(i, Ntime)]
             + O * C[:, k]
             + 0.001 * np.random.randn(Nneuron)
-        )  # the membrane potential is a leaky integration of the feedforward input and the spikes
+        )
         x = (1 - _lambda * dt) * x + dt * Input[:, np.mod(i, Ntime)]  # filtered input
 
         temp = V - Thresh - 0.01 * np.random.randn(Nneuron)
         k = np.argmax(temp)  # finding the neuron with largest membrane potential
         m = temp[k]
 
-        if (
-            m >= 0
-        ):  # if its membrane potential exceeds the threshold the neuron k spikes
-            O = 1  # the spike ariable is turned to one
-            F[:, k] = F[:, k] + epsf * (
-                alpha * x - F[:, k]
-            )  # updating the feedforward weights
-            C[:, k] = C[:, k] - (epsr) * (
-                beta * (V + mu * rO) + C[:, k] + mu * Id[:, k]
-            )  # updating the recurrent weights
-            rO[k] = rO[k] + 1  # updating the filtered spike train
+        # if its membrane potential exceeds the threshold the neuron k spikes
+        if m >= 0:
+            # the spike ariable is turned to one
+            O = 1
+
+            # updating the feedforward weights
+            F[:, k] = F[:, k] + epsf * (alpha * x - F[:, k])
+
+            # updating the recurrent weights
+            C[:, k] = C[:, k] - (epsr) * (beta * (V + mu * rO) + C[:, k] + mu * Id[:, k])
+
+            # updating the filtered spike train
+            rO[k] = rO[k] + 1
         else:
             O = 0
 
@@ -198,30 +195,27 @@ def Learning(dt, _lambda, epsr, epsf, alpha, beta, mu, Nneuron, Nx, Thresh, F, C
     print("Computing optimal decoders")
     TimeL = 50000  # size of the sequence  of the input that will be fed to neuron
     xL = np.zeros((Nx, TimeL))  # the target output/input
-    Decs = np.zeros(
-        (T, Nx, Nneuron)
-    )  # array where the decoding weights for each instance of the network will be stocked
-    InputL = (
-        0.3 * A * (np.random.multivariate_normal(np.zeros(Nx), np.eye(Nx), TimeL)).T
-    )  # generating a new input sequence
+
+    # array where the decoding weights for each instance of the network will be stocked
+    Decs = np.zeros((T, Nx, Nneuron))
+
+    # generating a new input sequence
+    InputL = 0.3 * A * (np.random.multivariate_normal(np.zeros(Nx), np.eye(Nx), TimeL)).T
 
     for k in range(Nx):
-        InputL[k, :] = np.convolve(
-            InputL[k, :], w, "same"
-        )  # smoothing the input as before
+        InputL[k, :] = np.convolve(InputL[k, :], w, "same")  # smoothing the input as before
 
     for t in range(1, TimeL):
-        xL[:, t] = (1 - _lambda * dt) * xL[:, t - 1] + dt * InputL[
-            :, t - 1
-        ]  # compute the target output by a leaky integration of the input
+        # compute the target output by a leaky integration of the input
+        xL[:, t] = (1 - _lambda * dt) * xL[:, t - 1] + dt * InputL[:, t - 1]
 
     for i in range(T):
-        (rOL, _, _) = runnet(
-            dt, _lambda, Fs[i, :, :], InputL, Cs[i, :, :], Nneuron, TimeL, Thresh
-        )  # running the network with the previously generated input for the i-th instanc eof the network
-        Dec = np.linalg.lstsq(rOL.T, xL.T, rcond=-1)[
-            0
-        ].T  # computing the optimal decoder that solves xL=Dec*rOL
+
+        # running the network with the previously generated input for the i-th instanc eof the network
+        (rOL, _, _) = runnet(dt, _lambda, Fs[i, :, :], InputL, Cs[i, :, :], Nneuron, TimeL, Thresh)
+
+        # computing the optimal decoder that solves xL=Dec*rOL
+        Dec = np.linalg.lstsq(rOL.T, xL.T, rcond=-1)[0].T
         Decs[i, :, :] = Dec  # stocking the decoder in Decs
 
     ##
@@ -252,37 +246,33 @@ def Learning(dt, _lambda, epsr, epsf, alpha, beta, mu, Nneuron, Nx, Thresh, F, C
     Trials = 10  # number of trials
 
     for r in range(Trials):  # for each trial
-        InputT = (
-            A * (np.random.multivariate_normal(np.zeros(Nx), np.eye(Nx), TimeT)).T
-        )  # we genrate a new input
+        # we genrate a new input
+        InputT = A * (np.random.multivariate_normal(np.zeros(Nx), np.eye(Nx), TimeT)).T
 
         for k in range(Nx):
             InputT[k, :] = np.convolve(InputT[k, :], w, "same")  # we wmooth it
 
         for t in range(1, TimeT):
-            xT[:, t] = (1 - _lambda * dt) * xT[:, t - 1] + dt * InputT[
-                :, t - 1
-            ]  # ans we comput the target output by leaky inegration of the input
+            # ans we comput the target output by leaky inegration of the input
+            xT[:, t] = (1 - _lambda * dt) * xT[:, t - 1] + dt * InputT[:, t - 1]
 
         for i in range(T):  # for each instance of the network
-            [rOT, OT, VT] = runnet(
-                dt, _lambda, Fs[i, :, :], InputT, Cs[i, :, :], Nneuron, TimeT, Thresh
-            )  # we run the network with current input InputL
+            # we run the network with current input InputL
+            (rOT, OT, VT) = runnet(dt, _lambda, Fs[i, :, :], InputT, Cs[i, :, :], Nneuron, TimeT, Thresh)
 
-            xestc = (
-                Decs[i, :, :] @ rOT
-            )  # we deocode the ouptut using the optinal decoders previously computed
+            # we deocode the ouptut using the optinal decoders previously computed
+            xestc = Decs[i, :, :] @ rOT
+
+            # we comput the variance of the error normalized by the variance of the target
             Error[i] = Error[i] + np.sum(np.var(xT - xestc, axis=1, ddof=1), axis=0) / (
                 np.sum(np.var(xT, axis=1, ddof=1), axis=0) * Trials
-            )  # we comput the variance of the error normalized by the variance of the target
-            MeanPrate[i] = MeanPrate[i] + np.sum(OT) / (
-                TimeT * dt * Nneuron * Trials
-            )  # we comput the average firing rate per neuron
-            MembraneVar[i] = MembraneVar[i] + np.sum(
-                np.var(VT, axis=1, ddof=1), axis=0
-            ) / (
-                Nneuron * Trials
-            )  # we compute the average membrane potential variance per neuron
+            )
+
+            # we comput the average firing rate per neuron
+            MeanPrate[i] = MeanPrate[i] + np.sum(OT) / (TimeT * dt * Nneuron * Trials)
+
+            # we compute the average membrane potential variance per neuron
+            MembraneVar[i] = MembraneVar[i] + np.sum(np.var(VT, axis=1, ddof=1), axis=0) / (Nneuron * Trials)
 
     ##
     #################################################################################
@@ -337,13 +327,13 @@ def Learning(dt, _lambda, epsr, epsf, alpha, beta, mu, Nneuron, Nx, Thresh, F, C
         CurrC = Cs[i, :, :]
 
         Copt = -CurrF.T @ CurrF  # we comput FF^T
-        optscale = np.trace(CurrC.T @ Copt) / np.sum(
-            Copt ** 2
-        )  # scaling factor between the current and optimal connectivities
+
+        # scaling factor between the current and optimal connectivities
+        optscale = np.trace(CurrC.T @ Copt) / np.sum(Copt ** 2)
         Cnorm = np.sum((CurrC) ** 2)  # norm of the actual connectivity
-        ErrorC[i] = (
-            np.sum((CurrC - optscale * Copt) ** 2) / Cnorm
-        )  # normalized error between the current and optimal connectivity
+
+        # normalized error between the current and optimal connectivity
+        ErrorC[i] = np.sum((CurrC - optscale * Copt) ** 2) / Cnorm
 
     ##################################################################################
     ###############################  Plotting Weights  ###############################
@@ -439,21 +429,18 @@ def twoDWhite():
 
     ##Initial connectivity
 
-    Fi = 0.5 * np.random.randn(
-        Nx, Nneuron
-    )  # the inital feedforward weights are chosen randomely
-    Fi = 1 * (
-        Fi / (np.sqrt(np.ones((Nx, 1)) @ (np.sum(Fi ** 2, axis=0, keepdims=True))))
-    )  # the FF weights are normalized
-    Ci = -0.2 * (np.random.rand(Nneuron, Nneuron)) - 0.5 * np.eye(
-        Nneuron
-    )  # the initial recurrent conectivity is very weak except for the autapses
+    # the inital feedforward weights are chosen randomely
+    Fi = 0.5 * np.random.randn(Nx, Nneuron)
+
+    # the FF weights are normalized
+    Fi = 1 * (Fi / (np.sqrt(np.ones((Nx, 1)) @ (np.sum(Fi ** 2, axis=0, keepdims=True)))))
+
+    # the initial recurrent conectivity is very weak except for the autapses
+    Ci = -0.2 * (np.random.rand(Nneuron, Nneuron)) - 0.5 * np.eye(Nneuron)
 
     Thresh = 0.5  # vector of thresholds of the neurons
 
-    (Fs, Cs, F, C, Decs, ErrorC) = Learning(
-        dt, _lambda, epsr, epsf, alpha, beta, mu, Nneuron, Nx, Thresh, Fi, Ci
-    )
+    (Fs, Cs, F, C, Decs, ErrorC) = Learning(dt, _lambda, epsr, epsf, alpha, beta, mu, Nneuron, Nx, Thresh, Fi, Ci)
 
     plt.show()
 
